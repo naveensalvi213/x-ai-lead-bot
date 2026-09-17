@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Automation Lead Details</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #1c1c1e;
+      color: #f2f2f7;
+      padding: 16px;
+      margin: 0;
+    }
+    .card {
+      background: #2c2c2e;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .title {
+      font-size: 13px;
+      text-transform: uppercase;
+      color: #8e8e93;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .author {
+      font-size: 18px;
+      font-weight: bold;
+      color: #0a84ff;
+      margin-bottom: 8px;
+    }
+    .content {
+      font-size: 15px;
+      line-height: 1.4;
+      color: #e5e5ea;
+      margin-bottom: 16px;
+      white-space: pre-wrap;
+    }
+    .reason {
+      background: #3a3a3c;
+      border-left: 4px solid #30d158;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 16px;
+      color: #f2f2f7;
+    }
+    .comment-box {
+      background: #1c1c1e;
+      border: 1px solid #3a3a3c;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 16px;
+      word-break: break-word;
+      color: #e5e5ea;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      text-decoration: none;
+      box-sizing: border-box;
+      margin-bottom: 10px;
+    }
+    .btn-primary {
+      background: #0a84ff;
+      color: #ffffff;
+    }
+    .btn-secondary {
+      background: #30d158;
+      color: #ffffff;
+    }
+    .btn:active {
+      opacity: 0.85;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="card">
+      <div class="title">Target Tweet</div>
+      <div class="author" id="author">Loading...</div>
+      <div class="content" id="text">...</div>
+      
+      <div class="title">Service Opportunity</div>
+      <div class="reason" id="reason">...</div>
+
+      <div class="title">Suggested Outreach Comment</div>
+      <div class="comment-box" id="comment">...</div>
+
+      <button class="btn btn-secondary" onclick="copyComment()">📋 Copy Comment</button>
+      <a id="tweetLink" class="btn btn-primary" target="_blank" href="#">🔗 Open & Reply on X</a>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const leadId = urlParams.get('id');
+
+    if (leadId) {
+      fetch(`/api/lead/${leadId}`)
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('author').innerText = `@${data.author_handle}`;
+          document.getElementById('text').innerText = data.text;
+          document.getElementById('reason').innerText = data.reason;
+          document.getElementById('comment').innerText = data.suggested_comment;
+          document.getElementById('tweetLink').href = `https://x.com/${data.author_handle}/status/${data.tweet_id}`;
+        })
+        .catch(err => console.error("Failed to load lead details:", err));
+    }
+
+    function copyComment() {
+      const commentText = document.getElementById('comment').innerText;
+      navigator.clipboard.writeText(commentText).then(() => {
+        if (tg && tg.showAlert) {
+          tg.showAlert("Comment copied to clipboard!");
+        } else {
+          alert("Comment copied to clipboard!");
+        }
+      }).catch(err => {
+        console.error("Clipboard copy failed:", err);
+      });
+    }
+  </script>
+</body>
+</html>
