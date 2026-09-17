@@ -60,7 +60,7 @@ async def test_fetch_candidate_tweets_success_and_filtering():
             keywords=["ai automation"],
             ct0="mock_ct0",
             auth_token="mock_token",
-            max_tweets_per_keyword=5
+            max_tweets_per_section=20
         )
 
         assert len(results) == 1
@@ -71,14 +71,14 @@ async def test_fetch_candidate_tweets_success_and_filtering():
 
         # Check that search_tweet was called for both Top and Latest
         assert mock_client.search_tweet.call_count == 2
-        mock_client.search_tweet.assert_any_call("ai automation", product="Top", count=5)
-        mock_client.search_tweet.assert_any_call("ai automation", product="Latest", count=5)
+        mock_client.search_tweet.assert_any_call("ai automation", product="Top", count=20)
+        mock_client.search_tweet.assert_any_call("ai automation", product="Latest", count=20)
 
-        # Check that asyncio.sleep was called with human delay (7 to 15 s)
+        # Check that asyncio.sleep was called with human delay (3 to 7 s)
         assert mock_sleep.call_count == 2
         for call_args in mock_sleep.call_args_list:
             delay = call_args[0][0]
-            assert 7.0 <= delay <= 15.0
+            assert 3.0 <= delay <= 7.0
 
 @pytest.mark.asyncio
 async def test_fetch_candidate_tweets_rate_limit_handling():

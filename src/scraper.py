@@ -24,17 +24,17 @@ async def fetch_candidate_tweets(
     keywords: List[str],
     ct0: str,
     auth_token: str,
-    max_tweets_per_keyword: int = 20
+    max_tweets_per_section: int = 20
 ) -> List[Dict[str, Any]]:
     client = get_twikit_client(ct0, auth_token)
     candidates = []
     cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
 
     for keyword in keywords:
-        logger.info(f"Searching X for keyword: '{keyword}'")
+        logger.info(f"Searching X for keyword: '{keyword}' (20 Top + 20 Latest)")
         for product_type in ['Top', 'Latest']:
             try:
-                tweets = await client.search_tweet(keyword, product=product_type, count=max_tweets_per_keyword)
+                tweets = await client.search_tweet(keyword, product=product_type, count=max_tweets_per_section)
                 for t in tweets:
                     # Check age limit (last 24 hours)
                     created_at = getattr(t, 'created_at_datetime', None) or datetime.now(timezone.utc)
@@ -62,8 +62,8 @@ async def fetch_candidate_tweets(
                     logger.warning("X Rate Limit hit (HTTP 429). Pausing scraper execution...")
                     break
 
-            # Anti-ban human jitter sleep between requests (7 to 15 seconds)
-            jitter_delay = random.uniform(7.0, 15.0)
+            # Anti-ban human jitter sleep between requests (3 to 7 seconds)
+            jitter_delay = random.uniform(3.0, 7.0)
             await asyncio.sleep(jitter_delay)
 
     return candidates
