@@ -57,19 +57,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db_
         return
         
     user_id = update.effective_user.id
+    chat_id = str(update.effective_chat.id) if update.effective_chat else str(user_id)
 
     if keywords:
         save_keywords(user_id, keywords, db_path=db_path)
         kw_str = ", ".join(keywords)
         await update.message.reply_text(
-            f"✅ Keywords saved!\n🔍 *Active Keywords:* `{kw_str}`\n\nStarting immediate scan of X for leads...",
-            parse_mode="Markdown"
+            f"✅ *Keywords Received\\!*\n\n"
+            f"🔍 *Active Keywords:* `{kw_str}`\n"
+            f"⚡ *Starting instant search on X \\(20 Top \\+ 20 Latest per keyword\\)\\.\\.\\.*",
+            parse_mode="MarkdownV2"
         )
         
-        # Trigger immediate async background scan
+        # Trigger immediate search pipeline for these keywords
         from src.scheduler import run_lead_generation_cycle
         import asyncio
-        asyncio.create_task(run_lead_generation_cycle(db_path=db_path))
+        asyncio.create_task(run_lead_generation_cycle(target_keywords=keywords, target_chat_id=chat_id, db_path=db_path))
 
 def build_telegram_app(token: str, db_path: str = "data/leads.db") -> Application:
     from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters

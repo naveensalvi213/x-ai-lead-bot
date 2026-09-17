@@ -50,24 +50,34 @@ async def test_handle_message_saves_keywords():
     mock_user = MagicMock()
     mock_user.id = 55555
 
+    mock_chat = MagicMock()
+    mock_chat.id = 77777
+
     mock_message = AsyncMock()
     mock_message.text = "ai automation, n8n, make.com, python bot"
 
     mock_update = MagicMock()
     mock_update.message = mock_message
     mock_update.effective_user = mock_user
+    mock_update.effective_chat = mock_chat
 
     mock_context = MagicMock()
 
-    await handle_message(mock_update, mock_context, db_path=TEST_DB)
+    from unittest.mock import patch
+    def close_coro(coro):
+        coro.close()
+    with patch("asyncio.create_task", side_effect=close_coro) as mock_create_task:
+        await handle_message(mock_update, mock_context, db_path=TEST_DB)
+        mock_create_task.assert_called_once()
 
     saved_keywords = get_active_keywords(TEST_DB)
     assert saved_keywords == ["ai automation", "n8n", "make.com", "python bot"]
 
     mock_message.reply_text.assert_called_once()
     reply_arg = mock_message.reply_text.call_args[0][0]
-    assert "Keywords saved" in reply_arg
+    assert "Keywords Received" in reply_arg
     assert "ai automation, n8n, make.com, python bot" in reply_arg
+    assert "20 Top" in reply_arg
 
 @pytest.mark.asyncio
 async def test_handle_message_empty():

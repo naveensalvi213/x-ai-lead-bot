@@ -10,15 +10,20 @@ from src.bot import create_lead_notification
 
 logger = logging.getLogger(__name__)
 
-async def run_lead_generation_cycle(db_path: str = "data/leads.db") -> None:
+async def run_lead_generation_cycle(
+    target_keywords: Optional[list[str]] = None,
+    target_chat_id: Optional[str] = None,
+    db_path: str = "data/leads.db"
+) -> None:
     """
-    Fetches active keywords from SQLite database, searches X for candidate tweets,
+    Fetches active keywords from SQLite database (or target_keywords), searches X for candidate tweets,
     filters unseen tweets, evaluates lead quality using Gemini 2.5 Flash Lite,
-    saves evaluated leads to SQLite, and sends Telegram notifications for positive leads.
+    saves evaluated leads to SQLite, streams lead notifications to Telegram in real-time,
+    and sends a final scan summary message.
     """
-    logger.info("Executing scheduled X lead generation cycle...")
+    logger.info("Executing X lead generation cycle...")
     
-    keywords = get_active_keywords(db_path=db_path)
+    keywords = target_keywords or get_active_keywords(db_path=db_path)
     if not keywords:
         logger.info("No active keywords set. Skipping cycle.")
         return
@@ -27,7 +32,7 @@ async def run_lead_generation_cycle(db_path: str = "data/leads.db") -> None:
     auth_token = os.getenv("X_AUTH_TOKEN", "")
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+    chat_id = target_chat_id or os.getenv("TELEGRAM_CHAT_ID", "")
     webapp_url = os.getenv("WEBAPP_URL", "https://localhost:8080")
 
     if not all([ct0, auth_token, gemini_key, bot_token, chat_id]):
@@ -35,13 +40,17 @@ async def run_lead_generation_cycle(db_path: str = "data/leads.db") -> None:
         return
 
     bot = Bot(token=bot_token)
-    candidates = await fetch_candidate_tweets(keywords, ct0=ct0, auth_token=auth_token)
+    candidates = await fetch_candidate_tweets(keywords, ct0=ct0, auth_token=auth_token, max_tweets_per_section=20)
+
+    evaluated_count = 0
+    leads_found = 0
 
     for tweet in candidates:
         tweet_id = tweet["tweet_id"]
         if is_tweet_seen(tweet_id, db_path=db_path):
             continue
 
+        evaluated_count += 1
         eval_res = await evaluate_tweet_lead(tweet["text"], gemini_key)
         
         lead_data = {
@@ -57,6 +66,7 @@ async def run_lead_generation_cycle(db_path: str = "data/leads.db") -> None:
         save_tweet_lead(lead_data, db_path=db_path)
 
         if lead_data["is_lead"]:
+            leads_found += 1
             msg_text, keyboard = create_lead_notification(lead_data, webapp_url)
             await bot.send_message(
                 chat_id=chat_id,
@@ -64,3 +74,12 @@ async def run_lead_generation_cycle(db_path: str = "data/leads.db") -> None:
                 parse_mode="Markdown",
                 reply_markup=keyboard
             )
+
+    # Send final summary
+    summary_text = (
+        f"✅ *Scan Complete\\!*\n\n"
+        f"🔍 *Keywords Scanned:* {len(keywords)}\n"
+        f"📊 *New Posts Evaluated:* {evaluated_count}\n"
+        f"🎯 *Qualified Leads Found:* {leads_found}"
+    )
+    await bot.send_message(chat_id=chat_id, text=summary_text, parse_mode="MarkdownV2")
