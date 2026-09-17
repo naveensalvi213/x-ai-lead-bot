@@ -5,7 +5,21 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from twikit import Client
 
+from twikit.x_client_transaction.transaction import ClientTransaction
+
 logger = logging.getLogger(__name__)
+
+# Monkey-patch twikit ClientTransaction.get_indices to prevent KEY_BYTE indices errors on X frontend changes
+_original_get_indices = ClientTransaction.get_indices
+
+async def _patched_get_indices(self, home_page_response, session, headers):
+    try:
+        return await _original_get_indices(self, home_page_response, session, headers)
+    except Exception as e:
+        logger.warning(f"Twikit get_indices fallback triggered: {e}")
+        return 3, [12, 14, 7]
+
+ClientTransaction.get_indices = _patched_get_indices
 
 _client_instance: Optional[Client] = None
 
