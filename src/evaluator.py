@@ -21,23 +21,28 @@ Return ONLY a raw JSON object with the following schema:
 }
 """
 
+import asyncio
+
+def _sync_generate_content(tweet_text: str, api_key: str):
+    client = genai.Client(api_key=api_key)
+    prompt = f"Target Tweet Content:\n\"\"\"{tweet_text}\"\"\""
+    return client.models.generate_content(
+        model='gemini-2.5-flash-lite',
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            response_mime_type="application/json"
+        )
+    )
+
 async def evaluate_tweet_lead(tweet_text: str, api_key: str) -> Dict[str, Any]:
     """
     Evaluates a tweet to determine if the author is a potential lead for AI automation services.
-    Uses Gemini 2.5 Flash Lite via the google-genai SDK.
+    Uses Gemini 2.5 Flash Lite via the google-genai SDK inside an async thread pool executor.
     """
     try:
-        client = genai.Client(api_key=api_key)
-        prompt = f"Target Tweet Content:\n\"\"\"{tweet_text}\"\"\""
-        
-        response = client.models.generate_content(
-            model='gemini-2.5-flash-lite',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                response_mime_type="application/json"
-            )
-        )
+        response = await asyncio.to_thread(_sync_generate_content, tweet_text, api_key)
+
         
         raw_text = response.text.strip() if response.text else ""
         if raw_text.startswith("```json"):
