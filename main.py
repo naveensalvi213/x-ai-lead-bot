@@ -14,6 +14,24 @@ logger = logging.getLogger("main")
 
 scheduler = AsyncIOScheduler()
 
+import asyncio
+import httpx
+
+async def self_ping_keep_alive():
+    """Background task that self-pings the public /health URL every 4 minutes to prevent Render from sleeping."""
+    webapp_url = os.getenv("WEBAPP_URL", "https://x-ai-lead-bot.onrender.com").rstrip("/")
+    health_url = f"{webapp_url}/health"
+    await asyncio.sleep(15)  # Wait for initial server startup
+    
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        while True:
+            try:
+                res = await client.get(health_url)
+                logger.info(f"Self-ping keep-alive succeeded: status {res.status_code}")
+            except Exception as e:
+                logger.warning(f"Self-ping keep-alive ping error: {e}")
+            await asyncio.sleep(240)  # Ping every 4 minutes (240 seconds)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db_path = os.getenv("DB_PATH", "data/leads.db")
@@ -38,7 +56,13 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("TELEGRAM_BOT_TOKEN missing. Telegram Bot polling skipped.")
 
+    # Start Internal Self-Ping Keep-Alive Task (Prevents Render Free Tier Sleeping)
+    ping_task = asyncio.create_task(self_ping_keep_alive())
+    logger.info("Internal self-ping keep-alive task started (every 4 mins).")
+
     yield
+
+    ping_task.cancel()
 
     if tg_app:
         await tg_app.updater.stop()
@@ -47,6 +71,7 @@ async def lifespan(app: FastAPI):
         logger.info("Telegram Bot shut down cleanly.")
 
     scheduler.shutdown()
+
 
 app = FastAPI(lifespan=lifespan)
 
