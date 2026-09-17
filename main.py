@@ -18,15 +18,38 @@ scheduler = AsyncIOScheduler()
 async def lifespan(app: FastAPI):
     db_path = os.getenv("DB_PATH", "data/leads.db")
     init_db(db_path=db_path)
-    # Schedule periodic run every SCAN_INTERVAL_HOURS
+    
+    # Start APScheduler
     interval_hours = int(os.getenv("SCAN_INTERVAL_HOURS", "24"))
     scheduler.add_job(run_lead_generation_cycle, 'interval', hours=interval_hours, kwargs={"db_path": db_path})
     scheduler.start()
     logger.info(f"APScheduler started. Scanning every {interval_hours} hours.")
+
+    # Start Telegram Bot Polling
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    tg_app = None
+    if bot_token:
+        from src.bot import build_telegram_app
+        tg_app = build_telegram_app(bot_token, db_path=db_path)
+        await tg_app.initialize()
+        await tg_app.start()
+        await tg_app.updater.start_polling()
+        logger.info("Telegram Bot polling started successfully.")
+    else:
+        logger.warning("TELEGRAM_BOT_TOKEN missing. Telegram Bot polling skipped.")
+
     yield
+
+    if tg_app:
+        await tg_app.updater.stop()
+        await tg_app.stop()
+        await tg_app.shutdown()
+        logger.info("Telegram Bot shut down cleanly.")
+
     scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
+
 
 @app.get("/health")
 def health_check():
