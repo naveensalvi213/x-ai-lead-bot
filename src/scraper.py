@@ -35,13 +35,21 @@ async def fetch_candidate_tweets(
         for product_type in ['Top', 'Latest']:
             try:
                 tweets = await client.search_tweet(keyword, product=product_type, count=max_tweets_per_section)
+                if not tweets:
+                    logger.warning(f"No tweets returned by X for keyword '{keyword}' in {product_type}")
+                    continue
+
                 for t in tweets:
-                    # Check age limit (last 24 hours)
-                    created_at = getattr(t, 'created_at_datetime', None) or datetime.now(timezone.utc)
-                    if created_at.tzinfo is None:
+                    created_at = getattr(t, 'created_at_datetime', None)
+                    if not created_at:
+                        created_at = datetime.now(timezone.utc)
+                    elif created_at.tzinfo is None:
                         created_at = created_at.replace(tzinfo=timezone.utc)
                     
-                    if created_at < cutoff_time:
+                    # For Latest, filter posts older than 48 hours to account for timezone skew.
+                    # For Top, allow top-ranking posts from the past 7 days.
+                    max_hours = 48 if product_type == 'Latest' else 168
+                    if created_at < datetime.now(timezone.utc) - timedelta(hours=max_hours):
                         continue
 
                     screen_name = getattr(t.user, 'screen_name', 'unknown') if hasattr(t, 'user') and t.user else 'unknown'
@@ -57,10 +65,11 @@ async def fetch_candidate_tweets(
                         "url": f"https://x.com/{screen_name}/status/{t.id}"
                     })
             except Exception as e:
-                logger.error(f"Error searching X for keyword '{keyword}' in {product_type}: {e}")
+                logger.error(f"Error searching X for keyword '{keyword}' in {product_type}: {e}", exc_info=True)
                 if "429" in str(e):
                     logger.warning("X Rate Limit hit (HTTP 429). Pausing scraper execution...")
                     break
+
 
             # Anti-ban human jitter sleep between requests (3 to 7 seconds)
             jitter_delay = random.uniform(3.0, 7.0)

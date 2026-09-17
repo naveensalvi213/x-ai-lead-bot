@@ -32,9 +32,49 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "Send me any comma\\-separated keywords you want to monitor on X \\(e\\.g\\., `ai automation, n8n, make.com`\\)\\.\n\n"
             "Commands:\n"
             "• `/keywords` \\- Show active keywords\n"
-            "• `/status` \\- Check bot status",
+            "• `/id` \\- Show Chat / Group ID\n"
+            "• `/search <keywords>` \\- Search keywords in group or chat",
             parse_mode="MarkdownV2"
         )
+
+async def handle_id_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message and update.effective_chat:
+        chat_id = update.effective_chat.id
+        chat_title = update.effective_chat.title or update.effective_chat.username or "Private Chat"
+        await update.message.reply_text(
+            f"🆔 *Chat Information*\n\n"
+            f"• *Name:* `{chat_title}`\n"
+            f"• *Chat ID:* `{chat_id}`",
+            parse_mode="Markdown"
+        )
+
+async def handle_search_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, db_path: str = "data/leads.db") -> None:
+    if not update.message or not update.effective_chat:
+        return
+    text = " ".join(context.args) if context.args else ""
+    if not text and update.message.text:
+        text = update.message.text.replace("/search", "").strip()
+    
+    keywords = [k.strip() for k in text.split(",") if k.strip()]
+    if not keywords:
+        await update.message.reply_text("❌ Please specify keywords! Example: `/search ai automation, n8n`", parse_mode="Markdown")
+        return
+
+    chat_id = str(update.effective_chat.id)
+    user_id = update.effective_user.id if update.effective_user else 0
+
+    save_keywords(user_id, keywords, db_path=db_path)
+    kw_str = ", ".join(keywords)
+    await update.message.reply_text(
+        f"✅ *Keywords Received\\!*\n\n"
+        f"🔍 *Active Keywords:* `{kw_str}`\n"
+        f"⚡ *Starting instant search on X \\(20 Top \\+ 20 Latest per keyword\\)\\.\\.\\.*",
+        parse_mode="MarkdownV2"
+    )
+    
+    from src.scheduler import run_lead_generation_cycle
+    import asyncio
+    asyncio.create_task(run_lead_generation_cycle(target_keywords=keywords, target_chat_id=chat_id, db_path=db_path))
 
 async def handle_keywords_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, db_path: str = "data/leads.db") -> None:
     from src.db import get_active_keywords
@@ -44,7 +84,7 @@ async def handle_keywords_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
             kw_str = ", ".join(active)
             await update.message.reply_text(f"🔍 *Active Keywords:* `{kw_str}`", parse_mode="Markdown")
         else:
-            await update.message.reply_text("❌ No active keywords set. Send me a message with comma-separated keywords to set them!")
+            await update.message.reply_text("❌ No active keywords set. Send me a message or use `/search keyword1, keyword2`!")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db_path: str = "data/leads.db") -> None:
     if not update or not update.message or not update.message.text:
@@ -53,11 +93,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db_
     text = update.message.text.strip()
     keywords = [k.strip() for k in text.split(",") if k.strip()]
     
-    if not update.effective_user:
+    if not update.effective_chat:
         return
         
-    user_id = update.effective_user.id
-    chat_id = str(update.effective_chat.id) if update.effective_chat else str(user_id)
+    user_id = update.effective_user.id if update.effective_user else 0
+    chat_id = str(update.effective_chat.id)
 
     if keywords:
         save_keywords(user_id, keywords, db_path=db_path)
@@ -85,8 +125,14 @@ def build_telegram_app(token: str, db_path: str = "data/leads.db") -> Applicatio
     async def keywords_wrapper(u: Update, c: ContextTypes.DEFAULT_TYPE):
         await handle_keywords_cmd(u, c, db_path=db_path)
 
+    async def search_wrapper(u: Update, c: ContextTypes.DEFAULT_TYPE):
+        await handle_search_cmd(u, c, db_path=db_path)
+
     app.add_handler(CommandHandler("start", handle_start))
+    app.add_handler(CommandHandler("id", handle_id_cmd))
     app.add_handler(CommandHandler("keywords", keywords_wrapper))
+    app.add_handler(CommandHandler("search", search_wrapper))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_wrapper))
     return app
+
 

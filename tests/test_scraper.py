@@ -27,7 +27,7 @@ async def test_get_twikit_client():
 async def test_fetch_candidate_tweets_success_and_filtering():
     now = datetime.now(timezone.utc)
     recent_time = now - timedelta(hours=2)
-    old_time = now - timedelta(hours=26)
+    old_time = now - timedelta(hours=50)
 
     recent_tweet = MagicMock()
     recent_tweet.id = "recent_123"
