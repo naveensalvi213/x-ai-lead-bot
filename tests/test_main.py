@@ -98,7 +98,8 @@ async def test_scheduler_cycle(monkeypatch):
 
     mock_bot = AsyncMock()
     
-    with patch("src.scheduler.fetch_candidate_tweets", new_callable=AsyncMock, return_value=[candidate]) as mock_fetch, \
+    with patch("src.scraper.verify_x_credentials", new_callable=AsyncMock, return_value=True), \
+         patch("src.scheduler.fetch_candidate_tweets", new_callable=AsyncMock, return_value=[candidate]) as mock_fetch, \
          patch("src.scheduler.evaluate_tweet_lead", new_callable=AsyncMock, return_value=eval_result), \
          patch("src.scheduler.Bot", return_value=mock_bot):
         

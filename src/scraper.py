@@ -20,6 +20,29 @@ def get_twikit_client(ct0: str, auth_token: str) -> Client:
         _client_instance = client
     return _client_instance
 
+async def verify_x_credentials(ct0: str, auth_token: str) -> bool:
+    """Verifies if the provided X ct0 and auth_token cookies are active and valid."""
+    headers = {
+        "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnv1FZZRewM25D69s%2FZyGQ8VkiVw%3D9AnNwIzUejRydW",
+        "x-csrf-token": ct0,
+        "x-twitter-active-user": "yes",
+        "x-twitter-auth-type": "OAuth2Session",
+        "cookie": f"ct0={ct0}; auth_token={auth_token}",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+    async with httpx.AsyncClient(headers=headers, timeout=10.0) as http:
+        try:
+            res = await http.get("https://x.com/i/api/1.1/account/verify_credentials.json")
+            if res.status_code == 200:
+                logger.info("X credentials verified successfully.")
+                return True
+            else:
+                logger.error(f"X cookie verification failed: HTTP {res.status_code}")
+                return False
+        except Exception as e:
+            logger.error(f"Error verifying X cookies: {e}")
+            return False
+
 async def fetch_candidate_tweets(
     keywords: List[str],
     ct0: str,
@@ -28,7 +51,6 @@ async def fetch_candidate_tweets(
 ) -> List[Dict[str, Any]]:
     client = get_twikit_client(ct0, auth_token)
     candidates = []
-    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
 
     for keyword in keywords:
         logger.info(f"Searching X for keyword: '{keyword}' (20 Top + 20 Latest)")
@@ -65,14 +87,14 @@ async def fetch_candidate_tweets(
                         "url": f"https://x.com/{screen_name}/status/{t.id}"
                     })
             except Exception as e:
-                logger.error(f"Error searching X for keyword '{keyword}' in {product_type}: {e}", exc_info=True)
+                logger.error(f"Error searching X for keyword '{keyword}' in {product_type}: {e}")
                 if "429" in str(e):
-                    logger.warning("X Rate Limit hit (HTTP 429). Pausing scraper execution...")
+                    logger.warning("X Rate Limit hit (HTTP 429). Pausing search...")
+                    break
+                elif "401" in str(e) or "403" in str(e) or "Unauthorized" in str(e):
+                    logger.error("X Authentication failed (HTTP 401/403). Cookies have expired!")
                     break
 
-
-            # Anti-ban human jitter sleep between requests (3 to 7 seconds)
-            jitter_delay = random.uniform(3.0, 7.0)
-            await asyncio.sleep(jitter_delay)
+            await asyncio.sleep(random.uniform(3.0, 7.0))
 
     return candidates
